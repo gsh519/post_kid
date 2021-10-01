@@ -12,20 +12,43 @@ $file_handle = null;
 $split_data = null;
 $post = [];
 $posts = [];
+$errors = [];
+$clean = [];
 
 if (!empty($_POST['btn_submit'])) {
-  if ($file_handle = fopen(FILENAME, "a")) {
-    //書き込み日時を取得
-    $current_date = date("Y-m-d H:i:s");
 
-    //書き込みデータを作成
-    $data = "'{$_POST['view_name']}', '{$_POST['message']}', '{$current_date}' \n";
+  //表示名の入力チェック
+  if (empty($_POST['view_name'])) {
+    $errors[] = '表示名を入力してください';
+  } else {
+    $clean['view_name'] = htmlspecialchars($_POST['view_name'], ENT_QUOTES, 'UTF-8');
+    $clean['view_name'] = preg_replace('/\\r\\n|\\n|\\r/', '', $clean['view_name']);
+  }
 
-    //書き込み
-    fwrite($file_handle, $data);
+  //メッセージの入力チェック
+  if (empty($_POST['message'])) {
+    $errors[] = '一言メッセージを入力してください';
+  } else {
+    $clean['message'] = htmlspecialchars($_POST['message'], ENT_QUOTES, 'UTF-8');
+    $clean['message'] = preg_replace('/\\r\\n|\\n|\\r/', '', $clean['message']);
+  }
 
-    //ファイルを閉じる
-    fclose($file_handle);
+  if (empty($errors)) {
+    if ($file_handle = fopen(FILENAME, "a")) {
+      //書き込み日時を取得
+      $current_date = date("Y-m-d H:i:s");
+
+      //書き込みデータを作成
+      $data = "'{$clean['view_name']}', '{$clean['message']}', '{$current_date}' \n";
+
+      //書き込み
+      fwrite($file_handle, $data);
+
+      //ファイルを閉じる
+      fclose($file_handle);
+
+      $success_message = 'メッセージを書き込みました';
+    }
   }
 
   if ($file_handle = fopen(FILENAME, 'r')) {
@@ -46,8 +69,6 @@ if (!empty($_POST['btn_submit'])) {
 
     //ファイルを閉じる
     fclose($file_handle);
-
-    $success_message = 'メッセージを書き込みました';
   }
 }
 ?>
@@ -412,6 +433,13 @@ Common Style
   <!-- ここにメッセージの入力フォームを設置 -->
   <?php if (!empty($success_message)) : ?>
     <p class="success_message"><?php echo $success_message; ?></p>
+  <?php endif; ?>
+  <?php if (!empty($errors)) : ?>
+    <ul class="error_message">
+      <?php foreach ($errors as $error) : ?>
+        <li><?php echo $error; ?></li>
+      <?php endforeach; ?>
+    </ul>
   <?php endif; ?>
   <form method="post">
     <div>
