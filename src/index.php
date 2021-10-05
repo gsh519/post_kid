@@ -15,62 +15,76 @@ $posts = [];
 $errors = [];
 $clean = [];
 
+try {
+  // オプションの設定
+  $option = [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::MYSQL_ATTR_MULTI_STATEMENTS => false
+  ];
+  //データベースに接続
+  $pdo = new PDO('mysql:charset=UTF8;dbname=test;host=db', 'test', 'test', $option);
+} catch (PDOException $e) {
+  //接続エラーのときエラー内容を取得する
+  $errors[] = $e->getMessage();
+}
+
 if (!empty($_POST['btn_submit'])) {
 
+  // 空白除去
+  $view_name = preg_replace('/\A[\p{C}\p{Z}]++|[\p{C}\p{Z}]++\z/u', '', $_POST['view_name']);
+  $message = preg_replace('/\A[\p{C}\p{Z}]++|[\p{C}\p{Z}]++\z/u', '', $_POST['message']);
+
   //表示名の入力チェック
-  if (empty($_POST['view_name'])) {
+  if (empty($view_name)) {
     $errors[] = '表示名を入力してください';
-  } else {
-    $clean['view_name'] = htmlspecialchars($_POST['view_name'], ENT_QUOTES, 'UTF-8');
-    $clean['view_name'] = preg_replace('/\\r\\n|\\n|\\r/', '', $clean['view_name']);
   }
 
   //メッセージの入力チェック
-  if (empty($_POST['message'])) {
+  if (empty($message)) {
     $errors[] = '一言メッセージを入力してください';
-  } else {
-    $clean['message'] = htmlspecialchars($_POST['message'], ENT_QUOTES, 'UTF-8');
-    $clean['message'] = preg_replace('/\\r\\n|\\n|\\r/', '', $clean['message']);
   }
 
   if (empty($errors)) {
-    if ($file_handle = fopen(FILENAME, "a")) {
-      //書き込み日時を取得
-      $current_date = date("Y-m-d H:i:s");
+    //トランザクションの開始
+    $pdo->beginTransaction();
 
-      //書き込みデータを作成
-      $data = "'{$clean['view_name']}', '{$clean['message']}', '{$current_date}' \n";
+    try {
+      //SQL作成
+      $stmt = $pdo->prepare('INSERT INTO posts (username, message) VALUES (:view_name, :message)');
 
-      //書き込み
-      fwrite($file_handle, $data);
+      //値をセット
+      $stmt->bindParam(':view_name', $view_name, PDO::PARAM_STR);
+      $stmt->bindParam(':message', $message, PDO::PARAM_STR);
 
-      //ファイルを閉じる
-      fclose($file_handle);
+      //SQLクエリを実行
+      $stmt->execute();
 
+      //コミット(処理の実行)
+      $res = $pdo->commit();
+    } catch (Exception $e) {
+      //エラーが発生したときはロールバック
+      $pdo->rollBack();
+    }
+
+    if ($res) {
       $success_message = 'メッセージを書き込みました';
-    }
-  }
-
-  if ($file_handle = fopen(FILENAME, 'r')) {
-    while ($data = fgets($file_handle)) {
-      //ファイルの文字を'で分割
-      $split_data = preg_split('/\'/', $data);
-
-      //配列に格納
-      $post = [
-        'view_name' => $split_data[1],
-        'message' => $split_data[3],
-        'post_date' => $split_data[5]
-      ];
-
-      //配列をさらに配列の中に入れる
-      $posts[] = $post;
+    } else {
+      $errors[] = '書き込みに失敗しました';
     }
 
-    //ファイルを閉じる
-    fclose($file_handle);
+    //プリペアステートメントを削除
+    $stmt = null;
   }
 }
+
+if (empty($errors)) {
+  //投稿のデータを取得
+  $sql = 'SELECT username, message, created_at FROM posts ORDER BY created_at DESC';
+  $posts = $pdo->query($sql);
+}
+
+//データベースの接続を閉じる
+$pdo = null;
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -459,12 +473,14 @@ Common Style
       <?php foreach ($posts as $post) : ?>
         <article>
           <div class="info">
-            <h2><?php echo $post['view_name']; ?></h2>
-            <time><?php echo date('Y年m月d日 H:i', strtotime($post['post_date'])); ?></time>
+            <h2><?php echo $post['username']; ?></h2>
+            <time><?php echo $post['created_at']; ?></time>
           </div>
-          <p><?php echo $post['message']; ?></p>
+          <p><?php echo nl2br($post['message']); ?></p>
         </article>
       <?php endforeach; ?>
+    <?php elseif (count($posts) === 0) : ?>
+      <p>まだ投稿されていません</p>
     <?php endif; ?>
   </section>
 </body>
