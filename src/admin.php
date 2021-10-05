@@ -1,5 +1,8 @@
 <?php
 
+//管理ページのログインパスワード
+define('PASSWORD', 'adminPassword');
+
 //データベースの接続情報
 define('DB_HOST', 'db');
 define('DB_USER', 'test');
@@ -25,54 +28,10 @@ $errors = [];
 session_start();
 
 if (!empty($_POST['btn_submit'])) {
-
-  // 空白除去
-  $view_name = preg_replace('/\A[\p{C}\p{Z}]++|[\p{C}\p{Z}]++\z/u', '', $_POST['view_name']);
-  $message = preg_replace('/\A[\p{C}\p{Z}]++|[\p{C}\p{Z}]++\z/u', '', $_POST['message']);
-
-  //表示名の入力チェック
-  if (empty($view_name)) {
-    $errors[] = '表示名を入力してください';
+  if (!empty($_POST['admin_password']) && $_POST['admin_password'] === PASSWORD) {
+    $_SESSION['admin_login'] = true;
   } else {
-    //セッションに表示名を保存
-    $_SESSION['view_name'] = $view_name;
-  }
-
-  //メッセージの入力チェック
-  if (empty($message)) {
-    $errors[] = '一言メッセージを入力してください';
-  }
-
-  if (empty($errors)) {
-    //トランザクションの開始
-    $pdo->beginTransaction();
-
-    try {
-      //SQL作成
-      $stmt = $pdo->prepare('INSERT INTO posts (username, message) VALUES (:view_name, :message)');
-
-      //値をセット
-      $stmt->bindParam(':view_name', $view_name, PDO::PARAM_STR);
-      $stmt->bindParam(':message', $message, PDO::PARAM_STR);
-
-      //SQLクエリを実行
-      $stmt->execute();
-
-      //コミット(処理の実行)
-      $res = $pdo->commit();
-    } catch (Exception $e) {
-      //エラーが発生したときはロールバック
-      $pdo->rollBack();
-    }
-
-    if ($res) {
-      $success_message = 'メッセージを書き込みました';
-    } else {
-      $errors[] = '書き込みに失敗しました';
-    }
-
-    //プリペアステートメントを削除
-    $stmt = null;
+    $errors[] = 'ログインに失敗しました';
   }
 }
 
@@ -90,7 +49,7 @@ $pdo = null;
 
 <head>
   <meta charset="utf-8">
-  <title>ひと言掲示板</title>
+  <title>ひと言掲示板 管理ページ</title>
   <style>
     /*------------------------------
 
@@ -303,6 +262,7 @@ Common Style
     }
 
     input[type="text"],
+    input[type='password'],
     textarea {
       margin-bottom: 20px;
       padding: 10px;
@@ -312,7 +272,8 @@ Common Style
       background: #fff;
     }
 
-    input[type="text"] {
+    input[type="text"],
+    input[type="password"] {
       width: 200px;
     }
 
@@ -442,11 +403,8 @@ Common Style
 </head>
 
 <body>
-  <h1>ひと言掲示板</h1>
-  <!-- ここにメッセージの入力フォームを設置 -->
-  <?php if (!empty($success_message)) : ?>
-    <p class="success_message"><?php echo $success_message; ?></p>
-  <?php endif; ?>
+  <h1>ひと言掲示板 管理ページ</h1>
+  <!-- エラーが有る場合表示 -->
   <?php if (!empty($errors)) : ?>
     <ul class="error_message">
       <?php foreach ($errors as $error) : ?>
@@ -454,34 +412,38 @@ Common Style
       <?php endforeach; ?>
     </ul>
   <?php endif; ?>
-  <form method="post">
-    <div>
-      <label for="view_name">表示名</label>
-      <input type="text" id="view_name" name="view_name" value="<?php if (!empty($_SESSION['view_name'])) {
-                                                                  echo htmlspecialchars($_SESSION['view_name'], ENT_QUOTES, 'UTF-8');
-                                                                } ?>">
-    </div>
-    <div>
-      <label for="message">ひと言メッセージ</label>
-      <textarea name="message" id="message"></textarea>
-    </div>
-    <input type="submit" name="btn_submit" value="書き込む">
-  </form>
-  <hr>
   <section>
     <!-- ここに投稿されたメッセージを表示 -->
-    <?php if (!empty($posts)) : ?>
-      <?php foreach ($posts as $post) : ?>
-        <article>
-          <div class="info">
-            <h2><?php echo htmlspecialchars($post['username']); ?></h2>
-            <time><?php echo $post['created_at']; ?></time>
-          </div>
-          <p><?php echo nl2br(htmlspecialchars($post['message'], ENT_QUOTES, 'UTF-8')); ?></p>
-        </article>
-      <?php endforeach; ?>
-    <?php elseif (count($posts) === 0) : ?>
-      <p>まだ投稿されていません</p>
+    <?php if (!empty($_SESSION['admin_login']) && $_SESSION['admin_login'] === true) : ?>
+      <form method="get" action='./download.php'>
+        <select name="limit">
+          <option value="">全て</option>
+          <option value="10">10件</option>
+          <option value="30">30件</option>
+        </select>
+        <input type="submit" name="btn_download" value="ダウンロード">
+      </form>
+      <?php if (!empty($posts)) : ?>
+        <?php foreach ($posts as $post) : ?>
+          <article>
+            <div class="info">
+              <h2><?php echo htmlspecialchars($post['username']); ?></h2>
+              <time><?php echo $post['created_at']; ?></time>
+            </div>
+            <p><?php echo nl2br(htmlspecialchars($post['message'], ENT_QUOTES, 'UTF-8')); ?></p>
+          </article>
+        <?php endforeach; ?>
+      <?php elseif (count($posts) === 0) : ?>
+        <p>まだ投稿されていません</p>
+      <?php endif; ?>
+    <?php else : ?>
+      <form method="post">
+        <div>
+          <label for="admin_password">ログインパスワード</label>
+          <input type="password" id="admin_password" name="admin_password" value="">
+        </div>
+        <input type="submit" name="btn_submit" value="ログイン">
+      </form>
     <?php endif; ?>
   </section>
 </body>
