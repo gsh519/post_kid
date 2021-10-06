@@ -6,91 +6,78 @@ define('DB_USER', 'test');
 define('DB_PASS', 'test');
 define('DB_NAME', 'test');
 
+$posts = [];
+$errors = [];
+
+session_start();
+//管理者としてログインしているか確認
+if (empty($_SESSION['admin_login']) || $_SESSION['admin_login'] !== true) {
+  //ログインページへリダイレクト
+  header("Location: ./admin.php");
+  exit;
+}
+
+//データベースに接続
 try {
-  // オプションの設定
   $option = [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::MYSQL_ATTR_MULTI_STATEMENTS => false
   ];
-  //データベースに接続
+
   $pdo = new PDO('mysql:charset=UTF8;dbname=' . DB_NAME . ';host=' . DB_HOST, DB_USER, DB_PASS, $option);
 } catch (PDOException $e) {
   //接続エラーのときエラー内容を取得する
   $errors[] = $e->getMessage();
 }
 
-$posts = [];
-$errors = [];
+if (!empty($_GET['id']) && empty($_POST['id'])) {
+  //投稿を取得するコードが入る
+  //SQL作成
+  $stmt = $pdo->prepare("SELECT * FROM posts WHERE id = :id");
 
-session_start();
+  //値をセット
+  $stmt->bindValue(':id', $_GET['id'], PDO::PARAM_INT);
 
-if (!empty($_POST['btn_submit'])) {
+  //SQLクエリの実行
+  $stmt->execute();
 
-  // 空白除去
-  $view_name = preg_replace('/\A[\p{C}\p{Z}]++|[\p{C}\p{Z}]++\z/u', '', $_POST['view_name']);
-  $message = preg_replace('/\A[\p{C}\p{Z}]++|[\p{C}\p{Z}]++\z/u', '', $_POST['message']);
+  //表示するデータを取得
+  $posts = $stmt->fetch();
 
-  //表示名の入力チェック
-  if (empty($view_name)) {
-    $errors[] = '表示名を入力してください';
-  } else {
-    //セッションに表示名を保存
-    $_SESSION['view_name'] = $view_name;
+  if (empty($posts)) {
+    header("Location: ./admin.php");
+    exit;
+  }
+} elseif (!empty($_POST['id'])) {
+  //トランザクションの開始
+  $pdo->beginTransaction();
+
+  try {
+    //SQL作成
+    $stmt = $pdo->prepare("DELETE FROM posts WHERE id = :id");
+
+    //値をセット
+    $stmt->bindValue(':id', $_POST['id'], PDO::PARAM_INT);
+
+    //SQLクエリを実行
+    $stmt->execute();
+
+    //コミット(処理の実行)
+    $res = $pdo->commit();
+  } catch (Exception $e) {
+    //エラーが発生したときはロールバック
+    $pdo->rollBack();
   }
 
-  //メッセージの入力チェック
-  if (empty($message)) {
-    $errors[] = '一言メッセージを入力してください';
-  } else {
-    //文字数を確認
-    if (100 < mb_strlen($message, 'UTF-8')) {
-      $errors[] = 'ひと言メッセージは100文字以内で入力してください';
-    }
-  }
-
-  if (empty($errors)) {
-    //トランザクションの開始
-    $pdo->beginTransaction();
-
-    try {
-      //SQL作成
-      $stmt = $pdo->prepare('INSERT INTO posts (username, message) VALUES (:view_name, :message)');
-
-      //値をセット
-      $stmt->bindParam(':view_name', $view_name, PDO::PARAM_STR);
-      $stmt->bindParam(':message', $message, PDO::PARAM_STR);
-
-      //SQLクエリを実行
-      $stmt->execute();
-
-      //コミット(処理の実行)
-      $res = $pdo->commit();
-    } catch (Exception $e) {
-      //エラーが発生したときはロールバック
-      $pdo->rollBack();
-    }
-
-    if ($res) {
-      $_SESSION['success_message'] = 'メッセージを書き込みました';
-    } else {
-      $errors[] = '書き込みに失敗しました';
-    }
-
-    //プリペアステートメントを削除
-    $stmt = null;
-
-    header('Location: ./');
+  //更新に成功したら一覧に戻る
+  if ($res) {
+    header("Location: ./admin.php");
     exit;
   }
 }
 
-if (empty($errors)) {
-  //投稿のデータを取得
-  $sql = 'SELECT username, message, created_at FROM posts ORDER BY created_at DESC';
-  $posts = $pdo->query($sql);
-}
-
 //データベースの接続を閉じる
+$stmt = null;
 $pdo = null;
 ?>
 <!DOCTYPE html>
@@ -98,7 +85,7 @@ $pdo = null;
 
 <head>
   <meta charset="utf-8">
-  <title>ひと言掲示板</title>
+  <title>ひと言掲示板 管理ページ(投稿の削除)</title>
   <style>
     /*------------------------------
 
@@ -376,6 +363,28 @@ Common Style
       line-height: 1.6em;
     }
 
+    .btn_cancel {
+      display: inline-block;
+      margin-right: 10px;
+      padding: 10px 20px;
+      color: #555;
+      font-size: 86%;
+      border-radius: 5px;
+      border: 1px solid #999;
+    }
+
+    .btn_cancel:hover {
+      color: #999;
+      border-color: #999;
+      text-decoration: none;
+    }
+
+    .text-confirm {
+      margin-bottom: 20px;
+      font-size: 86%;
+      line-height: 1.6em;
+    }
+
 
     /*-----------------------------------
 掲示板エリア
@@ -450,12 +459,7 @@ Common Style
 </head>
 
 <body>
-  <h1>ひと言掲示板</h1>
-  <!-- ここにメッセージの入力フォームを設置 -->
-  <?php if (empty($_POST['btn_submit']) && !empty($_SESSION['success_message'])) : ?>
-    <p class="success_message"><?php echo htmlspecialchars($_SESSION['success_message'], ENT_QUOTES, 'UTF-8') ?></p>
-    <?php unset($_SESSION['success_message']) ?>
-  <?php endif; ?>
+  <h1>ひと言掲示板 管理ページ(投稿の削除)</h1>
   <?php if (!empty($errors)) : ?>
     <ul class="error_message">
       <?php foreach ($errors as $error) : ?>
@@ -463,38 +467,26 @@ Common Style
       <?php endforeach; ?>
     </ul>
   <?php endif; ?>
+  <p class="text-confirm">以下の投稿を削除します。<br>よろしければ「削除」ボタンを押してください。</p>
   <form method="post">
     <div>
       <label for="view_name">表示名</label>
-      <input type="text" id="view_name" name="view_name" value="<?php if (!empty($_SESSION['view_name'])) {
-                                                                  echo htmlspecialchars($_SESSION['view_name'], ENT_QUOTES, 'UTF-8');
-                                                                } ?>">
+      <input type="text" id="view_name" name="view_name" value="<?php if (!empty($posts['username'])) {
+                                                                  echo $posts['username'];
+                                                                } ?>" disabled>
     </div>
     <div>
       <label for="message">ひと言メッセージ</label>
-      <textarea name="message" id="message" value="<?php if (!empty($message)) {
-                                                      echo htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
-                                                    } ?>"></textarea>
+      <textarea name="message" id="message" disabled><?php if (!empty($posts['message'])) {
+                                                        echo $posts['message'];
+                                                      } ?></textarea>
     </div>
-    <input type="submit" name="btn_submit" value="書き込む">
+    <a class="btn_cancel" href="admin.php">キャンセル</a>
+    <input type="submit" name="btn_submit" value="削除">
+    <input type="hidden" name="id" value="<?php if (!empty($posts['id'])) {
+                                            echo $posts['id'];
+                                          } ?>">
   </form>
-  <hr>
-  <section>
-    <!-- ここに投稿されたメッセージを表示 -->
-    <?php if (!empty($posts)) : ?>
-      <?php foreach ($posts as $post) : ?>
-        <article>
-          <div class="info">
-            <h2><?php echo htmlspecialchars($post['username']); ?></h2>
-            <time><?php echo $post['created_at']; ?></time>
-          </div>
-          <p><?php echo nl2br(htmlspecialchars($post['message'], ENT_QUOTES, 'UTF-8')); ?></p>
-        </article>
-      <?php endforeach; ?>
-    <?php elseif (count($posts) === 0) : ?>
-      <p>まだ投稿されていません</p>
-    <?php endif; ?>
-  </section>
 </body>
 
 </html>

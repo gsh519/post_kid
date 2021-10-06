@@ -9,6 +9,15 @@ define('DB_USER', 'test');
 define('DB_PASS', 'test');
 define('DB_NAME', 'test');
 
+$posts = [];
+$errors = [];
+
+session_start();
+
+if (!empty($_GET['btn_logout'])) {
+  unset($_SESSION['admin_login']);
+}
+
 try {
   // オプションの設定
   $option = [
@@ -22,10 +31,7 @@ try {
   $errors[] = $e->getMessage();
 }
 
-$posts = [];
-$errors = [];
 
-session_start();
 
 if (!empty($_POST['btn_submit'])) {
   if (!empty($_POST['admin_password']) && $_POST['admin_password'] === PASSWORD) {
@@ -37,7 +43,7 @@ if (!empty($_POST['btn_submit'])) {
 
 if (empty($errors)) {
   //投稿のデータを取得
-  $sql = 'SELECT username, message, created_at FROM posts ORDER BY created_at DESC';
+  $sql = 'SELECT * FROM posts ORDER BY created_at DESC';
   $posts = $pdo->query($sql);
 }
 
@@ -301,6 +307,15 @@ Common Style
       background-color: #2392d8;
     }
 
+    input[name=btn_logout] {
+      margin-top: 40px;
+      background-color: #666;
+    }
+
+    input[name=btn-logout]:hover {
+      background-color: #777;
+    }
+
     hr {
       margin: 20px 0;
       padding: 0;
@@ -377,6 +392,12 @@ Common Style
       font-size: 72%;
     }
 
+    .info p {
+      display: inline-block;
+      line-height: 1.6em;
+      font-size: 86%;
+    }
+
     article p {
       color: #555;
       font-size: 86%;
@@ -429,13 +450,18 @@ Common Style
             <div class="info">
               <h2><?php echo htmlspecialchars($post['username']); ?></h2>
               <time><?php echo $post['created_at']; ?></time>
+              <p>
+                <a href="edit.php?id=<?php echo $post['id']; ?>">編集</a>
+                <a href="delete.php?id=<?php echo $post['id']; ?>">削除</a>
+              </p>
             </div>
             <p><?php echo nl2br(htmlspecialchars($post['message'], ENT_QUOTES, 'UTF-8')); ?></p>
           </article>
         <?php endforeach; ?>
-      <?php elseif (count($posts) === 0) : ?>
-        <p>まだ投稿されていません</p>
       <?php endif; ?>
+      <form action="" method="get">
+        <input type="submit" name="btn_logout" value="ログアウト">
+      </form>
     <?php else : ?>
       <form method="post">
         <div>
