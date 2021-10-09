@@ -35,7 +35,7 @@ if (!empty($_POST['btn_submit'])) {
     $errors[] = '表示名を入力してください';
   } else {
     //セッションに表示名を保存
-    $_SESSION['view_name'] = $view_name;
+    // $_SESSION['view_name'] = $view_name;
   }
 
   //メッセージの入力チェック
